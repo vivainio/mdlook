@@ -121,6 +121,8 @@ def email_to_markdown(email: Email) -> str:
     lines.append(f"date: {email.received_at.strftime('%Y-%m-%d %H:%M:%S')}")
     if email.unread:
         lines.append("unread: true")
+    if email.external:
+        lines.append("external: true")
     lines.append(f"folder: {_yaml_str(email.folder_path)}")
     if email.conversation_id:
         lines.append(f"conversation_id: {_yaml_str(email.conversation_id)}")

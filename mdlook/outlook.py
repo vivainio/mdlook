@@ -31,6 +31,7 @@ class Email:
     conversation_id: str = ""
     in_reply_to: str = ""
     unread: bool = False
+    external: bool = False
 
 
 def _get_folder_path(folder: object) -> str:
@@ -158,7 +159,7 @@ def iter_emails(
                     # Cheap properties first — skip body fetch if already synced
                     entry_id = _safe_str(item.EntryID)
                     if skip_ids and entry_id in skip_ids:
-                        continue
+                        break  # sorted newest-first: everything after is also seen
 
                     received: datetime = item.ReceivedTime
                     received_naive = received.replace(tzinfo=None)
@@ -181,6 +182,7 @@ def iter_emails(
                         conversation_id=_safe_str(item.ConversationID) if fetch_body else "",
                         in_reply_to=_safe_str(getattr(item, "InReplyTo", "")) if fetch_body else "",
                         unread=bool(item.UnRead),
+                        external=_safe_str(item.SenderEmailType).upper() != "EX",
                     )
                 except Exception:
                     continue

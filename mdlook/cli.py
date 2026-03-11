@@ -9,7 +9,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -33,10 +33,11 @@ def _parse_date(ctx: object, param: object, value: str | None) -> datetime | Non
 
 @click.group(invoke_without_command=True)
 @click.option("--output", "-o", default=DEFAULT_OUTPUT_DIR, type=click.Path(), help="Directory to write .md files into.")
-@click.option("--folder", "-f", default=None, help="Regex filter on folder path (e.g. 'Inbox|Sent').")
+@click.option("--folder", "-f", default="Inbox", show_default=True, help="Regex filter on folder path (e.g. 'Inbox|Sent').")
 @click.option("--since", "-s", default=None, callback=_parse_date, is_eager=False, expose_value=True,
               help="Only sync emails received on/after this date (YYYY-MM-DD).")
 @click.option("--account", "-a", default=None, help="Filter by Outlook account/store name.")
+@click.option("--external", is_flag=True, default=False, help="Include emails from external senders (skipped by default).")
 @click.option("--flat", is_flag=True, default=False, help="Write all files flat (no subdirs).")
 @click.option("--dry-run", is_flag=True, default=False, help="Discover emails but do not write files.")
 @click.option("--state-file", default=None, type=click.Path(), help="Path to state JSON file.")
@@ -47,6 +48,7 @@ def main(
     folder: str | None,
     since: datetime | None,
     account: str | None,
+    external: bool,
     flat: bool,
     dry_run: bool,
     state_file: str | None,
@@ -57,12 +59,11 @@ def main(
 
     out = Path(output)
     sf = Path(state_file) if state_file else None
-    if since is None:
-        since = datetime.now() - timedelta(days=30)
 
     click.echo(f"Syncing to: {out.resolve()}")
     if folder:
         click.echo(f"  Folder filter: {folder}")
+
     if since:
         click.echo(f"  Since: {since.date()}")
     if account:
@@ -80,6 +81,7 @@ def main(
         folder_pattern=folder,
         since=since,
         account_name=account,
+        include_external=external,
         flat=flat,
         dry_run=dry_run,
         state_file=sf,
@@ -128,6 +130,7 @@ def read_mails(count: int, output: str, today: bool, unread: bool, body: bool) -
             continue
         if unread and meta.get("unread") != "true":
             continue
+
         results.append((meta, body_text, path))
         if not (today or unread) and len(results) >= count:
             break
@@ -176,6 +179,26 @@ def search_mails(query: str, output: str) -> None:
         click.echo(str(path.resolve()))
         click.echo(text)
     click.echo(sep)
+
+
+@main.command("reset")
+@click.option("--output", "-o", default=DEFAULT_OUTPUT_DIR, type=click.Path(), help="Mail directory.")
+@click.option("--state-file", default=None, type=click.Path(), help="Path to state JSON file.")
+def reset_state(output: str, state_file: str | None) -> None:
+    """Delete state file and all synced .md files, forcing a full re-sync."""
+    mail_dir = Path(output)
+    sf = Path(state_file) if state_file else mail_dir / ".mdlook_state.json"
+
+    if sf.exists():
+        sf.unlink()
+        click.echo(f"Deleted state file: {sf}")
+    else:
+        click.echo(f"No state file found at: {sf}")
+
+    md_files = list(mail_dir.rglob("*.md"))
+    for f in md_files:
+        f.unlink()
+    click.echo(f"Deleted {len(md_files)} .md file(s) from {mail_dir}")
 
 
 @main.command("list-folders")

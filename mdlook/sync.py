@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from mdlook.convert import email_to_markdown, safe_filename
@@ -33,6 +33,7 @@ def run_sync(
     folder_pattern: str | None = None,
     since: datetime | None = None,
     account_name: str | None = None,
+    include_external: bool = False,
     flat: bool = False,
     dry_run: bool = False,
     state_file: Path | None = None,
@@ -56,6 +57,13 @@ def run_sync(
     state = SyncState(state_file)
     result = SyncResult()
 
+    # Use last_synced_at (minus buffer) as since when not explicitly provided
+    if since is None:
+        if state.last_synced_at is not None:
+            since = state.last_synced_at - timedelta(hours=1)
+        else:
+            since = datetime.now() - timedelta(days=30)
+
     if not dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -67,6 +75,8 @@ def run_sync(
         fetch_body=not dry_run,
     ):
         try:
+            if not include_external and email.external:
+                continue
 
             dest = _output_path(email, output_dir, flat)
 
